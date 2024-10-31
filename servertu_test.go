@@ -2,13 +2,21 @@ package mbserver
 
 import (
 	"testing"
+	"time"
 
 	"github.com/goburrow/serial"
 )
 
 func TestReadFullRTUPacket(t *testing.T) {
 	t.Logf("start test")
-	port, err := serial.Open(&serial.Config{Address: "/dev/tty4"})
+	port, err := serial.Open(&serial.Config{
+		Address:  "COM4",
+		BaudRate: 9600,
+		DataBits: 8,
+		StopBits: 1,
+
+		Timeout: 10 * time.Second,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,6 +2,7 @@ package mbserver
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 
@@ -67,6 +68,10 @@ func readFullRTUPacket(port serial.Port) ([]byte, error) {
 	)
 
 	for {
+		if bodyLen != nil && len(body) == *bodyLen {
+			break
+		}
+
 		tmpBuf := make([]byte, 1)
 		_, err := port.Read(tmpBuf)
 		if err != nil {
@@ -78,12 +83,9 @@ func readFullRTUPacket(port serial.Port) ([]byte, error) {
 
 		if bodyLen != nil {
 			body = append(body, tmpBuf...)
-			if len(body) == *bodyLen {
-				break
-			}
 		} else {
 			header = append(header, tmpBuf...)
-			if len(header) == 5 {
+			if len(header) == 6 {
 				remindPacketLength, err := calRtuPacketBodyLength(header)
 				if err != nil {
 					return nil, err
@@ -123,12 +125,12 @@ func calRtuPacketBodyLength(headerBytes []byte) (int, error) {
 	funcCode := FuncCode(headerBytes[1])
 	switch funcCode {
 	case FuncCodeReadCoils, FuncCodeReadDiscreteInputs, FuncCodeReadHoldingRegisters, FuncCodeReadInputRegisters:
-		return 0, nil
+		return 2, nil // checksum
 	case FuncCodeWriteSingleCoil, FuncCodeWriteSingleRegister:
-		return 0, nil
+		return 2, nil // checksum
 	case FuncCodeWriteMultipleCoils, FuncCodeWriteMultipleRegisters:
-		return (int(headerBytes[4])*256 + int(headerBytes[5])) * 2, nil
+		return (int(headerBytes[4])*256+int(headerBytes[5]))*2 + 2, nil
 	}
 
-	return 0, errors.New("unknown function code")
+	return 0, fmt.Errorf("unknown function code: %v", funcCode)
 }

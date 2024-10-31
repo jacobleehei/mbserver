@@ -1,6 +1,7 @@
 package mbserver
 
 import (
+	"errors"
 	"io"
 	"log"
 
@@ -59,23 +60,75 @@ SkipFrameError:
 }
 
 func readFullRTUPacket(port serial.Port) ([]byte, error) {
-	packet := make([]byte, 0)
+	var (
+		header  = make([]byte, 0)
+		body    = make([]byte, 0)
+		bodyLen *int
+	)
+
 	for {
-		if len(packet) >= 3 {
-			packetLength := packet[2] + 5 // including header, slave address, function code and CRC
-			if len(packet) >= int(packetLength) {
-				return packet[:packetLength], nil
-			}
-		}
 		tmpBuf := make([]byte, 1)
 		_, err := port.Read(tmpBuf)
 		if err != nil {
 			if err != io.EOF {
 				log.Printf("serial read error %v\n", err)
 			}
-			return packet, err
+			return header, err
 		}
 
-		packet = append(packet, tmpBuf...)
+		if bodyLen != nil {
+			body = append(body, tmpBuf...)
+			if len(body) == *bodyLen {
+				break
+			}
+		} else {
+			header = append(header, tmpBuf...)
+			if len(header) == 5 {
+				remindPacketLength, err := calRtuPacketBodyLength(header)
+				if err != nil {
+					return nil, err
+				}
+				bodyLen = &remindPacketLength
+			}
+		}
 	}
+
+	return append(header, body...), nil
+}
+
+type FuncCode int
+
+const (
+	FuncCodeReadCoils              FuncCode = 1
+	FuncCodeReadDiscreteInputs     FuncCode = 2
+	FuncCodeReadHoldingRegisters   FuncCode = 3
+	FuncCodeReadInputRegisters     FuncCode = 4
+	FuncCodeWriteSingleCoil        FuncCode = 5
+	FuncCodeWriteSingleRegister    FuncCode = 6
+	FuncCodeWriteMultipleCoils     FuncCode = 15
+	FuncCodeWriteMultipleRegisters FuncCode = 16
+)
+
+// modbus rtu header format:
+//
+//	byte 0: slave address
+//	byte 1: function code
+//	byte 2, 3: starting address
+//	byte 4, 5:  quantity of coils/registers
+func calRtuPacketBodyLength(headerBytes []byte) (int, error) {
+	if len(headerBytes) < 6 {
+		return 0, errors.New("header len < 6")
+	}
+
+	funcCode := FuncCode(headerBytes[1])
+	switch funcCode {
+	case FuncCodeReadCoils, FuncCodeReadDiscreteInputs, FuncCodeReadHoldingRegisters, FuncCodeReadInputRegisters:
+		return 0, nil
+	case FuncCodeWriteSingleCoil, FuncCodeWriteSingleRegister:
+		return 0, nil
+	case FuncCodeWriteMultipleCoils, FuncCodeWriteMultipleRegisters:
+		return (int(headerBytes[4])*256 + int(headerBytes[5])) * 2, nil
+	}
+
+	return 0, errors.New("unknown function code")
 }

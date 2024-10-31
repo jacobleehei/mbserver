@@ -44,6 +44,11 @@ SkipFrameError:
 			return
 		}
 
+		if (packet[0] != 0 && s.slaveID != 0) && packet[0] != s.slaveID {
+			log.Printf("slave address mismatch: %v != %v\n", packet[0], s.slaveID)
+			continue
+		}
+
 		frame, err := NewRTUFrame(packet)
 		if err != nil {
 			log.Printf("bad serial frame error %v\n", err)

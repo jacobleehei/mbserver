@@ -13,6 +13,7 @@ import (
 type Server struct {
 	// Debug enables more verbose messaging.
 	Debug            bool
+	slaveID          uint8 // slave address
 	listeners        []net.Listener
 	ports            []serial.Port
 	portsWG          sync.WaitGroup
@@ -32,8 +33,10 @@ type Request struct {
 }
 
 // NewServer creates a new Modbus server (slave).
-func NewServer() *Server {
-	s := &Server{}
+func NewServer(slaveID uint8) *Server {
+	s := &Server{
+		slaveID: slaveID,
+	}
 
 	// Allocate Modbus memory maps.
 	s.DiscreteInputs = make([]byte, 65536)
